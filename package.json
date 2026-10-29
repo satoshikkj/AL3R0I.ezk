@@ -1,0 +1,10 @@
+{
+  "name": "al3r0i-ezk",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Chat de IA com personalidade AL3R0I.ezk",
+  "scripts": {
+    "dev": "vercel dev"
+  }
+}
