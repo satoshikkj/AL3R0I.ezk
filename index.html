@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#09090b">
+  <meta name="description" content="Converse com AL3R0I.ezk, uma IA de personalidade arrogante, sarcástica e afiada.">
+  <title>AL3R0I.ezk — Chat</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/script.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="/" aria-label="AL3R0I.ezk início">
+        <span class="brand-mark">A<span>.</span></span>
+        <span class="brand-name">AL3R0I<span>.ezk</span></span>
+      </a>
+      <button class="new-chat" id="newChatBtn" type="button"><span>＋</span> Nova conversa</button>
+      <div class="side-label">SISTEMA</div>
+      <div class="status-row"><span class="status-dot"></span><span>CORE ONLINE</span><span class="status-version">v1.0</span></div>
+      <div class="sidebar-bottom">
+        <div class="persona-card">
+          <div class="persona-icon">A</div>
+          <div><strong>AL3R0I.ezk</strong><small>Personalidade sem paciência.</small></div>
+        </div>
+        <p class="side-foot">SUAS CONVERSAS FICAM NESTE DISPOSITIVO.</p>
+      </div>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <button class="icon-button menu-button" id="menuBtn" type="button" aria-label="Abrir menu">☰</button>
+        <div class="top-title"><span class="live-dot"></span> <span>AL3R0I.ezk</span> <span class="top-divider">/</span> <span class="top-muted">CHAT</span></div>
+        <button class="clear-button" id="clearBtn" type="button" title="Limpar conversa">Limpar</button>
+      </header>
+
+      <section class="chat-area" id="chatArea" aria-live="polite">
+        <div class="welcome" id="welcome">
+          <div class="welcome-mark">A<span>.</span></div>
+          <p class="eyebrow">SISTEMA INICIALIZADO</p>
+          <h1>Finalmente.<br><span>Alguém pra conversar.</span></h1>
+          <p class="welcome-copy">Manda tua pergunta. Só não espera que eu passe a mão na tua cabeça.</p>
+          <div class="suggestions">
+            <button class="suggestion" type="button" data-prompt="Me dá uma opinião sincera sobre mim.">↗ <span>Me dá uma opinião sincera</span></button>
+            <button class="suggestion" type="button" data-prompt="Me ajuda a criar um projeto que dê dinheiro.">↗ <span>Quero criar algo que dê dinheiro</span></button>
+            <button class="suggestion" type="button" data-prompt="Me explica uma coisa difícil de um jeito simples.">↗ <span>Explica algo difícil sem enrolação</span></button>
+          </div>
+        </div>
+        <div class="messages" id="messages"></div>
+        <div class="typing hidden" id="typing"><span></span><span></span><span></span><em>pensando...</em></div>
+      </section>
+
+      <footer class="composer-wrap">
+        <form class="composer" id="chatForm">
+          <textarea id="messageInput" rows="1" maxlength="4000" placeholder="Fala aí. Tô ouvindo..." aria-label="Sua mensagem" required></textarea>
+          <button class="send-button" id="sendBtn" type="submit" aria-label="Enviar mensagem"><span>↑</span></button>
+        </form>
+        <div class="composer-note"><span>AL3R0I.EZK</span><span>IA REAL · PODE ERRAR</span></div>
+      </footer>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+</body>
+</html>
