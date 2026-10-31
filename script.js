@@ -361,7 +361,7 @@ async function sendMessage(rawText) {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: active.messages.slice(-16), settings: userSettings, memories: window.AL3R0I_MEMORY?.getAll() || [] })
+      body: JSON.stringify({ messages: active.messages.slice(-20), settings: userSettings, memories: window.AL3R0I_MEMORY?.getAll() || [] })
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "Não consegui falar com o servidor.");
@@ -379,10 +379,8 @@ async function sendMessage(rawText) {
     const message = error instanceof TypeError
       ? "Não consegui alcançar o servidor. Confere se o site está publicado e tenta de novo."
       : (error.message || "Algo deu errado. Tenta de novo.");
-    active.messages.push({ role: "assistant", content: message });
-    active.messages = active.messages.slice(-40);
-    active.updatedAt = Date.now();
-    persistChats();
+    // Erros de transporte não entram no histórico enviado ao modelo.
+    // Isso evita que uma falha temporária seja interpretada como resposta da IA.
     if (active.id === activeChatId) appendMessage("assistant", message);
   } finally {
     setBusy(false);
