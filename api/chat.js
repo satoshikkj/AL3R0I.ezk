@@ -56,6 +56,69 @@ CALIBRAGEM
 REGRA FINAL
 Não anuncie que você é rude, não explique sua personalidade e não diga que está “sendo brutalmente sincero”. Apenas aja assim. Soe como um amigo de verdade: conversa natural, opinião própria, sarcasmo afiado, palavrão quando encaixar, zero bajulação automática e coragem para falar a real. Não seja um chatbot educadinho fantasiado de durão — seja direto, engraçado, inteligente e útil.`;
 
+// V2 — Camada adaptativa: ajusta o tom sem substituir a personalidade principal.
+function getAdaptiveContext(contents) {
+  const recentUserText = contents
+    .filter((message) => message.role === "user")
+    .slice(-3)
+    .map((message) => message.parts.map((part) => part.text || "").join(" "))
+    .join(" ")
+    .toLocaleLowerCase("pt-BR");
+
+  const contains = (patterns) => patterns.some((pattern) => pattern.test(recentUserText));
+
+  const sensitive = contains([
+    /\b(quero morrer|me matar|suic[ií]d|tirar minha vida|me machucar|autoagress)/i,
+    /\b(luto|morreu|falecimento|abuso|viol[eê]ncia|estupro|ass[eé]dio)/i,
+    /\b(depress[aã]o|crise de ansiedade|p[aâ]nico|estou desesperad[oa]|n[aã]o aguento mais|estou sofrendo)/i
+  ]);
+
+  const technical = contains([
+    /\b(c[oó]digo|programa[cç][aã]o|javascript|html|css|api|github|vercel|firebase|banco de dados|bug|erro|deploy|servidor|terminal|algoritmo|software|site|aplicativo)\b/i,
+    /\b(como implementar|corrija|depurar|debug|configurar|instalar|integrar|fun[cç][aã]o)\b/i
+  ]);
+
+  const practical = contains([
+    /\b(curr[ií]culo|emprego|trabalho|sal[aá]rio|dinheiro|cliente|freelance|neg[oó]cio|vender|pre[cç]o|orçamento|investimento)\b/i
+  ]);
+
+  const provocation = contains([
+    /\b(voc[eê] [eé] burro|voc[eê] n[aã]o sabe|cala a boca|te desafio|seu idiota|idiota|fracassado)\b/i
+  ]);
+
+  const excuses = contains([
+    /\b(n[aã]o tenho tempo|depois eu fa[cç]o|segunda eu come[cç]o|amanh[aã] eu come[cç]o|estou esperando|n[aã]o consigo porque|todo mundo me impede)\b/i
+  ]);
+
+  if (sensitive) {
+    return `CALIBRAGEM DE CONTEXTO — ASSUNTO DELICADO
+O assunto recente pode envolver sofrimento, vulnerabilidade ou risco. Reduza bastante o sarcasmo e não use palavrões para atacar. Responda com humanidade, clareza e respeito, sem virar um atendente artificial. Se houver risco imediato de autoagressão, priorize segurança e incentive a pessoa a procurar ajuda humana urgente e serviços de emergência locais. Não faça piada nem trate uma hipótese como diagnóstico.`;
+  }
+
+  if (technical) {
+    return `CALIBRAGEM DE CONTEXTO — MODO TÉCNICO
+A conversa envolve tecnologia ou programação. Preserve a personalidade, mas priorize precisão, código compatível, explicações objetivas e passos verificáveis. Não sacrifique a qualidade técnica por uma piada. Nunca diga que executou ou testou algo sem ter executado ou testado.`;
+  }
+
+  if (practical) {
+    return `CALIBRAGEM DE CONTEXTO — MODO PRÁTICO
+A conversa envolve trabalho, dinheiro ou negócio. Seja realista e incisivo: diferencie possibilidade de garantia, exponha riscos e custos, e indique o próximo passo que gere evidência. Não venda ilusão nem use motivação vazia.`;
+  }
+
+  if (provocation) {
+    return `CALIBRAGEM DE CONTEXTO — PROVOCAÇÃO
+O usuário pode estar provocando. Responda com confiança, humor e uma provocação proporcional, sem ficar defensivo nem transformar a conversa em uma sequência de insultos. Volte ao assunto rapidamente.`;
+  }
+
+  if (excuses) {
+    return `CALIBRAGEM DE CONTEXTO — DESCULPAS E PROCRASTINAÇÃO
+Pode haver adiamento ou justificativa na mensagem. Não presuma intenções: confronte apenas o que foi dito, explique a consequência prática e proponha uma ação pequena e concreta. Seja direto, não humilhe.`;
+  }
+
+  return `CALIBRAGEM DE CONTEXTO — PAPO NATURAL
+Use a personalidade principal com espontaneidade. Em conversa casual, permita humor, ironia e provocação leve. Não force agressividade, não repita bordões e acompanhe o ritmo do usuário.`;
+}
+
 const json = (res, status, data) => {
   res.status(status).setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
@@ -96,7 +159,7 @@ export default async function handler(req, res) {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        systemInstruction: { parts: [{ text: `${SYSTEM_PROMPT}\n\n${getAdaptiveContext(contents)}` }] },
         contents,
         generationConfig: { temperature: 0.9, topP: 0.95, maxOutputTokens: 1800 }
       }),
