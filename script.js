@@ -72,6 +72,8 @@ let voiceProcessing = false;
 let voiceFinalTranscript = "";
 let voiceRecognition = null;
 let voiceRestartTimer = null;
+let voiceAudio = null;
+let voiceAudioAbortController = null;
 
 function setVoiceStatus(message, state = "") {
   voiceStatus.textContent = message;
@@ -93,6 +95,9 @@ function stopVoiceSession() {
     voiceRecognition = null;
   }
   window.speechSynthesis?.cancel();
+  if (voiceAudioAbortController) voiceAudioAbortController.abort();
+  voiceAudioAbortController = null;
+  if (voiceAudio) { voiceAudio.pause(); voiceAudio.removeAttribute("src"); voiceAudio.load(); voiceAudio = null; }
   voiceOverlay.classList.add("hidden");
   voiceOverlay.setAttribute("aria-hidden", "true");
   voiceBtn.classList.remove("active");
@@ -155,47 +160,174 @@ function startVoiceListening() {
   }
 }
 
-function speakVoiceReply(text) {
-  if (!voiceActive || !text || !window.speechSynthesis || !("SpeechSynthesisUtterance" in window)) {
+async function speakVoiceReply(text) {
+  if (!voiceActive || !text) {
     voiceProcessing = false;
-    if (voiceActive) voiceRestartTimer = setTimeout(startVoiceListening, 350);
+    if (voiceActive) voiceRestartTimer = setTimeout(startVoiceListening, 250);
     return;
   }
+
   const spoken = String(text)
-    .replace(/\n\nFontes consultadas:[\s\S]*$/i, "")
-    .replace(/https?:\/\/\S+/g, "link")
+    .replace(/\\n\\nFontes consultadas:[\\s\\S]*$/i, "")
+    .replace(/https?:\\/\\/\\S+/g, "link")
     .replace(/[*_#>]/g, " ")
-    .trim();
+    .replace(/\\s+/g, " ")
+    .trim()
+    .slice(0, 4500);
+
   if (!spoken) {
     voiceProcessing = false;
-    voiceRestartTimer = setTimeout(startVoiceListening, 350);
+    if (voiceActive) voiceRestartTimer = setTimeout(startVoiceListening, 250);
     return;
   }
-  const utterance = new SpeechSynthesisUtterance(spoken);
-  utterance.lang = "pt-BR";
-  utterance.rate = 1.02;
-  utterance.pitch = 0.92;
-  const voices = window.speechSynthesis.getVoices();
-  const portugueseVoice = voices.find((voice) => /^pt[-_]BR$/i.test(voice.lang))
-    || voices.find((voice) => /^pt/i.test(voice.lang));
-  if (portugueseVoice) utterance.voice = portugueseVoice;
-  utterance.onstart = () => setVoiceStatus("AL3R0I está falando...", "speaking");
-  utterance.onend = () => {
+
+  setVoiceStatus("Preparando a voz neural...", "speaking");
+  voiceAudioAbortController = new AbortController();
+
+  try {
+    const response = await fetch("/api/voice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: spoken }),
+      signal: voiceAudioAbortController.signal
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || "Não consegui gerar o áudio.");
+    }
+
+    if (!voiceActive) return;
+    setVoiceStatus("AL3R0I está falando...", "speaking");
+
+    // Usa MediaSource para tocar os pedaços MP3 conforme chegam, sem esperar o arquivo inteiro.
+    if (window.MediaSource && MediaSource.isTypeSupported("audio/mpeg") && response.body) {
+      await playStreamingMp3(response);
+    } else {
+      const audioBlob = await response.blob();
+      if (!voiceActive) return;
+      await playAudioBlob(audioBlob);
+    }
+  } catch (error) {
+    if (error.name === "AbortError" || !voiceActive) return;
+    console.error("ElevenLabs TTS:", error);
+    // Fallback apenas se a API neural falhar; a voz principal continua sendo ElevenLabs.
+    try {
+      await playDeviceVoice(spoken);
+    } catch {
+      setVoiceStatus(error.message || "Falha ao gerar áudio. Confira a conexão e a chave da ElevenLabs.");
+    }
+  } finally {
+    voiceAudioAbortController = null;
     voiceProcessing = false;
     if (voiceActive) {
       setVoiceStatus("Pode continuar. Estou ouvindo.");
-      voiceRestartTimer = setTimeout(startVoiceListening, 300);
+      voiceRestartTimer = setTimeout(startVoiceListening, 220);
     }
-  };
-  utterance.onerror = () => {
-    voiceProcessing = false;
-    if (voiceActive) {
-      setVoiceStatus("Não consegui reproduzir a voz. Verifique o áudio do dispositivo.");
-      voiceRestartTimer = setTimeout(startVoiceListening, 900);
+  }
+}
+
+function playStreamingMp3(response) {
+  return new Promise(async (resolve, reject) => {
+    const mediaSource = new MediaSource();
+    const audio = new Audio();
+    const objectUrl = URL.createObjectURL(mediaSource);
+    audio.src = objectUrl;
+    audio.preload = "auto";
+    voiceAudio = audio;
+
+    let sourceBuffer;
+    let queue = [];
+    let finished = false;
+    let started = false;
+    let settled = false;
+
+    const cleanup = () => {
+      URL.revokeObjectURL(objectUrl);
+      if (voiceAudio === audio) voiceAudio = null;
+    };
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const complete = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const pump = () => {
+      if (!sourceBuffer || sourceBuffer.updating) return;
+      if (queue.length) {
+        try { sourceBuffer.appendBuffer(queue.shift()); }
+        catch (error) { fail(error); }
+      } else if (finished && mediaSource.readyState === "open") {
+        try { mediaSource.endOfStream(); } catch {}
+      }
+    };
+
+    audio.addEventListener("ended", complete, { once: true });
+    audio.addEventListener("error", () => fail(new Error("Falha na reprodução do áudio.")), { once: true });
+    mediaSource.addEventListener("sourceopen", async () => {
+      try {
+        sourceBuffer = mediaSource.addSourceBuffer("audio/mpeg");
+        sourceBuffer.mode = "sequence";
+        sourceBuffer.addEventListener("updateend", () => {
+          if (!started && sourceBuffer.buffered.length) {
+            started = true;
+            audio.play().catch(fail);
+          }
+          pump();
+        });
+
+        const reader = response.body.getReader();
+        while (voiceActive) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          queue.push(value);
+          pump();
+        }
+        finished = true;
+        pump();
+      } catch (error) {
+        fail(error);
+      }
+    }, { once: true });
+
+    audio.addEventListener("emptied", () => {
+      if (!voiceActive) complete();
+    }, { once: true });
+  });
+}
+
+function playAudioBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const audio = new Audio(URL.createObjectURL(blob));
+    const url = audio.src;
+    voiceAudio = audio;
+    audio.onended = () => { URL.revokeObjectURL(url); voiceAudio = null; resolve(); };
+    audio.onerror = () => { URL.revokeObjectURL(url); voiceAudio = null; reject(new Error("Não consegui reproduzir o áudio.")); };
+    audio.play().catch(reject);
+  });
+}
+
+function playDeviceVoice(text) {
+  return new Promise((resolve, reject) => {
+    if (!window.speechSynthesis || !("SpeechSynthesisUtterance" in window)) {
+      reject(new Error("Voz alternativa indisponível."));
+      return;
     }
-  };
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(utterance);
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "pt-BR";
+    utterance.rate = 1;
+    utterance.pitch = 0.95;
+    utterance.onend = resolve;
+    utterance.onerror = () => reject(new Error("Falha na voz alternativa."));
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  });
 }
 
 function startVoiceSession() {
