@@ -159,58 +159,69 @@ function startVoiceListening() {
   }
 }
 
+function splitVoiceText(text, limit = 440) {
+  const words = String(text || "").split(/\s+/);
+  const chunks = [];
+  let current = "";
+  for (const word of words) {
+    if ((current + " " + word).trim().length > limit && current) {
+      chunks.push(current.trim());
+      current = word;
+    } else {
+      current = (current + " " + word).trim();
+    }
+  }
+  if (current) chunks.push(current.trim());
+  return chunks;
+}
+
 async function speakVoiceReply(text) {
   if (!voiceActive || !text) {
     voiceProcessing = false;
     if (voiceActive) voiceRestartTimer = setTimeout(startVoiceListening, 250);
     return;
   }
-
   const spoken = String(text)
     .replace(/\n\nFontes consultadas:[\s\S]*$/i, "")
     .replace(/https?:\/\/\S+/g, "link")
     .replace(/[*_#>]/g, " ")
-    .replace(/\\s+/g, " ")
+    .replace(/\s+/g, " ")
     .trim()
     .slice(0, 4500);
-
   if (!spoken) {
     voiceProcessing = false;
     if (voiceActive) voiceRestartTimer = setTimeout(startVoiceListening, 250);
     return;
   }
-
-  setVoiceStatus("Preparando a voz neural...", "speaking");
+  setVoiceStatus("Preparando a voz Kokoro...", "speaking");
   voiceAudioAbortController = new AbortController();
   let playbackError = "";
-
   try {
-    const response = await fetch("/api/voice", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: spoken }),
-      signal: voiceAudioAbortController.signal
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || "Não consegui gerar o áudio.");
-    }
-
-    if (!voiceActive) return;
-    setVoiceStatus("AL3R0I está falando...", "speaking");
-
-    // Usa MediaSource para tocar os pedaços MP3 conforme chegam, sem esperar o arquivo inteiro.
-    if (window.MediaSource && MediaSource.isTypeSupported("audio/mpeg") && response.body) {
-      await playStreamingMp3(response);
-    } else {
-      const audioBlob = await response.blob();
-      if (!voiceActive) return;
-      await playAudioBlob(audioBlob);
+    const chunks = splitVoiceText(spoken);
+    for (let index = 0; index < chunks.length && voiceActive; index++) {
+      const response = await fetch("/api/voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: chunks[index] }),
+        signal: voiceAudioAbortController.signal
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Não consegui gerar o áudio.");
+      }
+      if (!voiceActive) break;
+      setVoiceStatus(chunks.length > 1 ? "AL3R0I está falando... (" + (index + 1) + "/" + chunks.length + ")" : "AL3R0I está falando...", "speaking");
+      if (window.MediaSource && MediaSource.isTypeSupported("audio/mpeg") && response.body) {
+        await playStreamingMp3(response);
+      } else {
+        const audioBlob = await response.blob();
+        if (!voiceActive) break;
+        await playAudioBlob(audioBlob);
+      }
     }
   } catch (error) {
     if (error.name === "AbortError" || !voiceActive) return;
-    console.error("Microsoft Edge TTS:", error);
+    console.error("Kokoro TTS:", error);
     playbackError = error.message || "Falha ao gerar áudio. Tente novamente.";
     setVoiceStatus(playbackError);
   } finally {
@@ -227,7 +238,6 @@ async function speakVoiceReply(text) {
     }
   }
 }
-
 function playStreamingMp3(response) {
   return new Promise(async (resolve, reject) => {
     const mediaSource = new MediaSource();
