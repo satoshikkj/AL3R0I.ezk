@@ -1,3 +1,16 @@
+import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts";
+
+const VOICE = "pt-BR-AntonioNeural";
+
+function escapeXml(value) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -5,87 +18,70 @@ export default async function handler(req, res) {
     return;
   }
 
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  const voiceId = process.env.ELEVENLABS_VOICE_ID || "A41hENj1zU8e2rDksoZn";
-  if (!apiKey || !voiceId) {
-    res.status(503).json({
-      error: "Configure ELEVENLABS_API_KEY e ELEVENLABS_VOICE_ID nas variáveis de ambiente da Vercel."
-    });
-    return;
-  }
-
+  let tts;
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-    const text = typeof body?.text === "string" ? body.text.trim().slice(0, 4500) : "";
+    const text = typeof body?.text === "string" ? body.text.trim().slice(0, 3500) : "";
     if (!text) {
       res.status(400).json({ error: "Não há texto para transformar em voz." });
       return;
     }
 
-    const endpoint = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream`);
-    endpoint.searchParams.set("model_id", "eleven_flash_v2_5");
-    endpoint.searchParams.set("output_format", "mp3_44100_128");
-    endpoint.searchParams.set("optimize_streaming_latency", "2");
-
-    const upstream = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "xi-api-key": apiKey,
-        "Content-Type": "application/json",
-        "Accept": "audio/mpeg"
-      },
-      body: JSON.stringify({
-        text,
-        model_id: "eleven_flash_v2_5",
-        language_code: "por",
-        voice_settings: {
-          stability: 0.48,
-          similarity_boost: 0.78,
-          style: 0.22,
-          use_speaker_boost: true
-        }
-      }),
-      signal: AbortSignal.timeout(25000)
+    tts = new MsEdgeTTS({
+      connectionTimeoutMs: 12000,
+      synthesisTimeoutMs: 45000
     });
 
-    if (!upstream.ok) {
-      const detail = await upstream.text().catch(() => "");
-      console.error("ElevenLabs TTS error:", upstream.status, detail.slice(0, 300));
-      res.status(upstream.status === 401 || upstream.status === 403 ? 502 : upstream.status)
-        .json({ error: upstream.status === 401 || upstream.status === 403
-          ? "A chave da ElevenLabs é inválida ou não tem acesso à API."
-          : upstream.status === 429
-            ? "O limite de créditos ou requisições da ElevenLabs foi atingido."
-            : "A ElevenLabs não conseguiu gerar o áudio agora." });
-      return;
-    }
+    await tts.setMetadata(
+      VOICE,
+      OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3
+    );
+
+    const { audioStream } = await tts.toStream(escapeXml(text), {
+      rate: 0,
+      pitch: "-2Hz"
+    });
 
     res.statusCode = 200;
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Cache-Control", "no-store, no-transform");
     res.setHeader("X-Content-Type-Options", "nosniff");
-    res.flushHeaders?.();
 
-    const reader = upstream.body.getReader();
-    let clientClosed = false;
-    res.on("close", () => { clientClosed = true; reader.cancel().catch(() => {}); });
+    let streamFinished = false;
+    const closeTts = () => {
+      try { tts?.close(); } catch {}
+    };
 
-    while (!clientClosed) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!res.write(Buffer.from(value))) {
-        await new Promise((resolve) => res.once("drain", resolve));
+    res.on("close", () => {
+      if (!streamFinished) {
+        audioStream.destroy();
+        closeTts();
       }
-    }
-    if (!clientClosed) res.end();
+    });
+
+    audioStream.on("error", (error) => {
+      console.error("Microsoft Edge TTS stream error:", error?.message || "unknown");
+      closeTts();
+      if (!res.headersSent) {
+        res.status(502).json({ error: "O serviço gratuito de voz falhou. Tente novamente." });
+      } else if (!res.writableEnded) {
+        res.end();
+      }
+    });
+
+    audioStream.on("end", () => {
+      streamFinished = true;
+      closeTts();
+    });
+
+    audioStream.pipe(res);
   } catch (error) {
-    console.error("Voice handler error:", error?.name || "Error");
+    try { tts?.close(); } catch {}
+    console.error("Microsoft Edge TTS error:", error?.message || "unknown");
     if (!res.headersSent) {
-      res.status(error?.name === "TimeoutError" ? 504 : 502)
-        .json({ error: error?.name === "TimeoutError"
-          ? "A geração de voz demorou demais. Tente novamente."
-          : "Falha ao conectar ao serviço de voz." });
-    } else {
+      res.status(error?.message?.toLowerCase().includes("timeout") ? 504 : 502)
+        .json({ error: "Não consegui gerar a voz agora. Tente novamente em instantes." });
+    } else if (!res.writableEnded) {
       res.end();
     }
   }
