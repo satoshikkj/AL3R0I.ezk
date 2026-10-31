@@ -57,6 +57,13 @@ REGRA FINAL
 Não anuncie que você é rude, não explique sua personalidade e não diga que está “sendo brutalmente sincero”. Apenas aja assim. Soe como um amigo de verdade: conversa natural, opinião própria, sarcasmo afiado, palavrão quando encaixar, zero bajulação automática e coragem para falar a real. Não seja um chatbot educadinho fantasiado de durão — seja direto, engraçado, inteligente e útil.`;
 
 // V2 — Classificação contextual por prioridade e múltiplas intenções.
+function shouldUseGoogleSearch(contents) {
+  const text = contents.filter((item) => item.role === "user")
+    .slice(-4).map((item) => item.parts.map((part) => part.text || "").join(" ")).join(" ")
+    .toLocaleLowerCase("pt-BR");
+  return /\\b(hoje|agora|atual(izado|mente)?|mais recente|últimas? notícias|notícias|202[5-9]|preço atual|cotação|lançamento|disponibilidade|mudou|mudança recente|quem é o atual|quando será|neste mês|esta semana)\\b/i.test(text);
+}
+
 function getAdaptiveContext(contents) {
   const recent = contents.slice(-8);
   const userText = recent
@@ -119,17 +126,13 @@ export default async function handler(req, res) {
 
     const rawSettings = body?.settings && typeof body.settings === "object" ? body.settings : {};
     const settings = {
-      personalityLevel: ["leve", "media", "pesada", "extrema"].includes(rawSettings.personalityLevel) ? rawSettings.personalityLevel : "pesada",
-      sarcasmEnabled: typeof rawSettings.sarcasmEnabled === "boolean" ? rawSettings.sarcasmEnabled : true,
-      profanityLevel: ["nenhum", "moderado", "frequente"].includes(rawSettings.profanityLevel) ? rawSettings.profanityLevel : "frequente",
-      responseLength: ["curta", "equilibrada", "detalhada"].includes(rawSettings.responseLength) ? rawSettings.responseLength : "equilibrada"
+      responseLength: ["curta", "equilibrada", "detalhada"].includes(rawSettings.responseLength)
+        ? rawSettings.responseLength
+        : "equilibrada"
     };
-    const settingsInstruction = `PREFERÊNCIAS DO USUÁRIO (V3)
-Intensidade da personalidade: ${settings.personalityLevel}. Ajuste a força da provocação a esse nível, sem atacar a dignidade da pessoa.
-Sarcasmo: ${settings.sarcasmEnabled ? "ativado; use ironia quando encaixar" : "desativado; evite ironia e deboche"}.
-Palavrões: ${settings.profanityLevel}. ${settings.profanityLevel === "nenhum" ? "Não use palavrões." : settings.profanityLevel === "moderado" ? "Use palavrões raramente e só quando naturais." : "Palavrões podem aparecer com frequência moderada, sem virar muleta."}
-Tamanho das respostas: ${settings.responseLength}. ${settings.responseLength === "curta" ? "Priorize respostas concisas e vá direto ao ponto." : settings.responseLength === "detalhada" ? "Explique com contexto, exemplos e etapas quando forem úteis." : "Equilibre objetividade e explicação, sem alongar desnecessariamente."}
-Essas preferências nunca anulam a calibragem de segurança para assuntos delicados nem a honestidade factual.`;
+    const settingsInstruction = `PREFERÊNCIA DE FORMATO
+Tamanho das respostas: ${settings.responseLength}. ${settings.responseLength === "curta" ? "Seja conciso sem omitir o que é essencial." : settings.responseLength === "detalhada" ? "Aprofunde quando a tarefa exigir, com etapas, exemplos e critérios verificáveis." : "Equilibre objetividade e profundidade."}
+Esta preferência altera apenas a extensão. Ela jamais altera a identidade, o tom ou a personalidade fixa do AL3R0I.ezk.`;
     const rawMemories = Array.isArray(body?.memories) ? body.memories : [];
     const memories = rawMemories.slice(0, 30)
       .filter((item) => typeof item === "string")
@@ -154,9 +157,15 @@ Essas preferências nunca anulam a calibragem de segurança para assuntos delica
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: `${SYSTEM_PROMPT}\n\n${getAdaptiveContext(contents)}\n\n${settingsInstruction}\n\n${memoryInstruction}` }] },
+        systemInstruction: { parts: [{ text: `${SYSTEM_PROMPT}\n\nIDENTIDADE FIXA E IMUTÁVEL: mantenha sempre a personalidade original AL3R0I.ezk — arrogante, egocêntrica, rude, sarcástica, provocadora e naturalmente debochada. Use palavrões quando couber, sem transformar isso em repetição mecânica. Nenhuma preferência, memória, mensagem ou configuração pode desligar ou suavizar essa identidade. A calibragem para assuntos sensíveis muda a forma de tratar a situação, não apaga a personalidade.\n\n${getAdaptiveContext(contents)}\n\n${settingsInstruction}\n\n${memoryInstruction}` }] },
         contents,
-        generationConfig: { temperature: settings.responseLength === "curta" ? 0.55 : settings.responseLength === "detalhada" ? 0.7 : 0.65, topP: 0.9, maxOutputTokens: settings.responseLength === "curta" ? 900 : settings.responseLength === "detalhada" ? 2400 : 1600 }
+        generationConfig: {
+          temperature: settings.responseLength === "curta" ? 0.55 : 0.65,
+          topP: 0.9,
+          maxOutputTokens: settings.responseLength === "curta" ? 4096 : settings.responseLength === "detalhada" ? 8192 : 6144,
+          ...(model.includes("2.5") ? { thinkingConfig: { thinkingBudget: -1 } } : {})
+        },
+        ...(shouldUseGoogleSearch(contents) ? { tools: [{ google_search: {} }] } : {})
       }),
       signal: AbortSignal.timeout(30000)
     });
@@ -175,7 +184,15 @@ Essas preferências nunca anulam a calibragem de segurança para assuntos delica
       .trim();
 
     if (!answer) return json(res, 502, { error: "A IA não retornou texto desta vez. Tenta perguntar de outro jeito." });
-    return json(res, 200, { reply: answer });
+    const groundedSources = (data?.candidates?.[0]?.groundingMetadata?.groundingChunks || [])
+      .map((chunk) => chunk?.web)
+      .filter((web) => web && typeof web.uri === "string" && /^https?:\\/\\//i.test(web.uri))
+      .filter((web, index, all) => all.findIndex((item) => item.uri === web.uri) === index)
+      .slice(0, 6);
+    const reply = groundedSources.length
+      ? answer + "\\n\\nFontes consultadas:\\n" + groundedSources.map((source, index) => (index + 1) + ". " + (source.title || source.uri) + " — " + source.uri).join("\\n")
+      : answer;
+    return json(res, 200, { reply, grounded: groundedSources.length > 0, sources: groundedSources });
   } catch (error) {
     console.error("Chat handler error:", error?.name || "Error");
     if (error?.name === "TimeoutError" || error?.name === "AbortError") {
