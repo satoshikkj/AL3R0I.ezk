@@ -112,7 +112,7 @@ export default async function handler(req, res) {
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
     const messages = body?.messages;
-    if (!Array.isArray(messages) || messages.length === 0) {
+    if (!Array.isArray(messages) || messages.length === 0 || messages.length > 40) {
       return json(res, 400, { error: "Envie uma mensagem para começar." });
     }
 
