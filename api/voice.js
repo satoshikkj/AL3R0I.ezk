@@ -1,88 +1,48 @@
-import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts";
-
-const VOICE = "pt-BR-AntonioNeural";
-
-function escapeXml(value) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
+const API = "https://api.tts.ai/v1";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
-    res.status(405).json({ error: "Método não permitido." });
-    return;
+    return res.status(405).json({ error: "Método não permitido." });
   }
-
-  let tts;
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-    const text = typeof body?.text === "string" ? body.text.trim().slice(0, 3500) : "";
-    if (!text) {
-      res.status(400).json({ error: "Não há texto para transformar em voz." });
-      return;
+    const text = typeof body?.text === "string" ? body.text.trim() : "";
+    if (!text) return res.status(400).json({ error: "Não há texto para transformar em voz." });
+    if (text.length > 500) return res.status(413).json({ error: "Este trecho passou do limite de 500 caracteres." });
+    const jobResponse = await fetch(API + "/tts/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ model: "kokoro", text, voice: "pm_alex", language: "pt", speed: 1.25, format: "mp3" }),
+      signal: AbortSignal.timeout(20000)
+    });
+    const job = await jobResponse.json().catch(() => ({}));
+    if (!jobResponse.ok || !job.uuid) {
+      console.error("TTS.ai submit error:", job);
+      return res.status(jobResponse.status || 502).json({ error: job?.detail || job?.error || "O serviço Kokoro não aceitou o texto." });
     }
-
-    tts = new MsEdgeTTS({
-      connectionTimeoutMs: 12000,
-      synthesisTimeoutMs: 45000
-    });
-
-    await tts.setMetadata(
-      VOICE,
-      OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3
-    );
-
-    const { audioStream } = await tts.toStream(escapeXml(text), {
-      rate: 0,
-      pitch: "-2Hz"
-    });
-
-    res.statusCode = 200;
+    let result = null;
+    for (let attempt = 0; attempt < 35; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const statusResponse = await fetch(API + "/speech/results/?uuid=" + encodeURIComponent(job.uuid), { headers: { "Accept": "application/json" }, signal: AbortSignal.timeout(10000) });
+      result = await statusResponse.json().catch(() => ({}));
+      if (!statusResponse.ok) throw new Error(result?.error || "Falha ao consultar a geração de voz.");
+      if (result.status === "completed" && result.result_url) break;
+      if (result.status === "failed") throw new Error(result.error || "A geração de voz falhou.");
+      result = null;
+    }
+    if (!result?.result_url) throw new Error("O Kokoro demorou demais para gerar o áudio.");
+    const audioResponse = await fetch(result.result_url, { signal: AbortSignal.timeout(20000) });
+    if (!audioResponse.ok) throw new Error("Não consegui baixar o áudio gerado.");
+    const audio = Buffer.from(await audioResponse.arrayBuffer());
     res.setHeader("Content-Type", "audio/mpeg");
-    res.setHeader("Cache-Control", "no-store, no-transform");
+    res.setHeader("Content-Length", String(audio.length));
+    res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
-
-    let streamFinished = false;
-    const closeTts = () => {
-      try { tts?.close(); } catch {}
-    };
-
-    res.on("close", () => {
-      if (!streamFinished) {
-        audioStream.destroy();
-        closeTts();
-      }
-    });
-
-    audioStream.on("error", (error) => {
-      console.error("Microsoft Edge TTS stream error:", error?.message || "unknown");
-      closeTts();
-      if (!res.headersSent) {
-        res.status(502).json({ error: "O serviço gratuito de voz falhou. Tente novamente." });
-      } else if (!res.writableEnded) {
-        res.end();
-      }
-    });
-
-    audioStream.on("end", () => {
-      streamFinished = true;
-      closeTts();
-    });
-
-    audioStream.pipe(res);
+    return res.status(200).send(audio);
   } catch (error) {
-    try { tts?.close(); } catch {}
-    console.error("Microsoft Edge TTS error:", error?.message || "unknown");
-    if (!res.headersSent) {
-      res.status(error?.message?.toLowerCase().includes("timeout") ? 504 : 502)
-        .json({ error: "Não consegui gerar a voz agora. Tente novamente em instantes." });
-    } else if (!res.writableEnded) {
-      res.end();
-    }
+    console.error("Kokoro TTS error:", error?.message || "unknown");
+    if (!res.headersSent) return res.status(502).json({ error: error?.name === "TimeoutError" ? "O serviço de voz demorou demais. Tente novamente." : (error?.message || "Não consegui gerar a voz agora.") });
+    return res.end();
   }
 }
