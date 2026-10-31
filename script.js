@@ -9,29 +9,110 @@ const clearBtn = document.getElementById("clearBtn");
 const menuBtn = document.getElementById("menuBtn");
 const sidebar = document.getElementById("sidebar");
 const toastEl = document.getElementById("toast");
+const conversationListEl = document.getElementById("conversationList");
 
 const HISTORY_KEY = "al3r0i_ezk_chat_v1";
-let history = [];
+const CHATS_KEY = "al3r0i_ezk_conversations_v1";
+let chats = [];
+let activeChatId = null;
 let busy = false;
 let toastTimer;
 
-try {
-  const saved = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
-  if (Array.isArray(saved)) history = saved.filter((m) =>
+function createId() {
+  return `chat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createChat(messages = [], title = "Nova conversa") {
+  return {
+    id: createId(),
+    title,
+    updatedAt: Date.now(),
+    messages: Array.isArray(messages) ? messages : []
+  };
+}
+
+function validMessages(messages) {
+  if (!Array.isArray(messages)) return [];
+  return messages.filter((m) =>
     m && ["user", "assistant"].includes(m.role) && typeof m.content === "string"
   ).slice(-40);
-} catch { history = []; }
+}
+
+function loadChats() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(CHATS_KEY) || "null");
+    if (Array.isArray(stored)) {
+      chats = stored
+        .filter((chat) => chat && typeof chat.id === "string")
+        .map((chat) => ({
+          id: chat.id,
+          title: typeof chat.title === "string" && chat.title.trim() ? chat.title : "Nova conversa",
+          updatedAt: Number(chat.updatedAt) || Date.now(),
+          messages: validMessages(chat.messages)
+        }))
+        .sort((a, b) => b.updatedAt - a.updatedAt);
+      activeChatId = localStorage.getItem(`${CHATS_KEY}:active`);
+      if (!chats.some((chat) => chat.id === activeChatId)) activeChatId = chats[0]?.id || null;
+      return;
+    }
+  } catch {
+    chats = [];
+  }
+
+  // Migração: preserva a conversa antiga salva na versão anterior.
+  try {
+    const legacy = validMessages(JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"));
+    if (legacy.length) {
+      const firstUserMessage = legacy.find((m) => m.role === "user")?.content || "Conversa anterior";
+      const migrated = createChat(legacy, makeTitle(firstUserMessage));
+      chats = [migrated];
+      activeChatId = migrated.id;
+      persistChats();
+      return;
+    }
+  } catch {
+    // Um histórico antigo inválido não impede o chat de iniciar.
+  }
+
+  const firstChat = createChat();
+  chats = [firstChat];
+  activeChatId = firstChat.id;
+  persistChats();
+}
+
+function persistChats() {
+  try {
+    localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
+    if (activeChatId) localStorage.setItem(`${CHATS_KEY}:active`, activeChatId);
+    else localStorage.removeItem(`${CHATS_KEY}:active`);
+    // Mantém a chave legada atualizada para compatibilidade com versões anteriores.
+    const active = getActiveChat();
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(active?.messages || []));
+  } catch {
+    showToast("Não consegui salvar. O armazenamento deste dispositivo pode estar cheio.");
+  }
+}
+
+function getActiveChat() {
+  return chats.find((chat) => chat.id === activeChatId) || null;
+}
+
+function getActiveMessages() {
+  const active = getActiveChat();
+  return active ? active.messages : [];
+}
+
+function makeTitle(text) {
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return "Nova conversa";
+  return clean.length >  30 ? clean.slice(0,  30 - 1).trimEnd() + "…" : clean;
+}
 
 function showToast(message) {
   toastEl.textContent = message;
   toastEl.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2600);
-}
-
-function saveHistory() {
-  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(-40))); }
-  catch { showToast("Não consegui salvar o histórico neste dispositivo."); }
 }
 
 function scrollToBottom() {
@@ -66,42 +147,172 @@ function appendMessage(role, content) {
 }
 
 function renderHistory() {
+  const messages = getActiveMessages();
   messagesEl.replaceChildren();
-  welcomeEl.classList.toggle("hidden", history.length > 0);
-  history.forEach((item) => appendMessage(item.role, item.content));
+  welcomeEl.classList.toggle("hidden", messages.length > 0);
+  messages.forEach((item) => appendMessage(item.role, item.content));
+  renderConversationList();
   scrollToBottom();
+}
+
+function renderConversationList() {
+  if (!conversationListEl) return;
+  conversationListEl.replaceChildren();
+
+  const ordered = [...chats].sort((a, b) => b.updatedAt - a.updatedAt);
+  if (!ordered.length) {
+    const empty = document.createElement("p");
+    empty.className = "history-empty";
+    empty.textContent = "Suas conversas aparecerão aqui.";
+    conversationListEl.appendChild(empty);
+    return;
+  }
+
+  ordered.forEach((chat) => {
+    const item = document.createElement("div");
+    item.className = `conversation-item${chat.id === activeChatId ? " active" : ""}`;
+
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "conversation-open";
+    open.textContent = chat.title;
+    open.title = chat.title;
+    open.addEventListener("click", () => openChat(chat.id));
+
+    const actions = document.createElement("div");
+    actions.className = "conversation-actions";
+
+    const rename = document.createElement("button");
+    rename.type = "button";
+    rename.className = "conversation-action";
+    rename.textContent = "✎";
+    rename.title = "Renomear conversa";
+    rename.setAttribute("aria-label", `Renomear ${chat.title}`);
+    rename.addEventListener("click", () => renameChat(chat.id));
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "conversation-action delete";
+    remove.textContent = "×";
+    remove.title = "Excluir conversa";
+    remove.setAttribute("aria-label", `Excluir ${chat.title}`);
+    remove.addEventListener("click", () => deleteChat(chat.id));
+
+    actions.append(rename, remove);
+    item.append(open, actions);
+    conversationListEl.appendChild(item);
+  });
+}
+
+function openChat(id) {
+  if (busy || !chats.some((chat) => chat.id === id)) return;
+  activeChatId = id;
+  persistChats();
+  renderHistory();
+  sidebar.classList.remove("open");
+  messageInput.focus();
+}
+
+function startNewChat() {
+  if (busy) return;
+  const chat = createChat();
+  chats.unshift(chat);
+  activeChatId = chat.id;
+  persistChats();
+  renderHistory();
+  sidebar.classList.remove("open");
+  messageInput.value = "";
+  messageInput.style.height = "auto";
+  messageInput.focus();
+}
+
+function renameChat(id) {
+  if (busy) return;
+  const chat = chats.find((item) => item.id === id);
+  if (!chat) return;
+  const proposed = window.prompt("Novo nome da conversa:", chat.title);
+  if (proposed === null) return;
+  const title = proposed.trim();
+  if (!title) {
+    showToast("O nome não pode ficar vazio.");
+    return;
+  }
+  chat.title = title.slice(0, 60);
+  chat.updatedAt = Date.now();
+  persistChats();
+  renderConversationList();
+  showToast("Conversa renomeada.");
+}
+
+function deleteChat(id) {
+  if (busy) return;
+  const chat = chats.find((item) => item.id === id);
+  if (!chat) return;
+  if (!window.confirm(`Excluir a conversa "${chat.title}"? Essa ação não pode ser desfeita.`)) return;
+
+  chats = chats.filter((item) => item.id !== id);
+  if (activeChatId === id) activeChatId = chats[0]?.id || null;
+  if (!activeChatId) {
+    const replacement = createChat();
+    chats.unshift(replacement);
+    activeChatId = replacement.id;
+  }
+  persistChats();
+  renderHistory();
+  showToast("Conversa excluída.");
+}
+
+function clearCurrentChat() {
+  if (busy) return;
+  const active = getActiveChat();
+  if (!active || !active.messages.length) {
+    showToast("Essa conversa já está vazia.");
+    return;
+  }
+  if (!window.confirm("Limpar as mensagens desta conversa? Ela continuará salva no histórico.")) return;
+  active.messages = [];
+  active.title = "Nova conversa";
+  active.updatedAt = Date.now();
+  persistChats();
+  renderHistory();
+  messageInput.value = "";
+  messageInput.style.height = "auto";
+  messageInput.focus();
+  showToast("Mensagens limpas. A conversa continua no histórico.");
 }
 
 function setBusy(value) {
   busy = value;
   sendBtn.disabled = value;
   messageInput.disabled = value;
+  newChatBtn.disabled = value;
+  clearBtn.disabled = value;
   typingEl.classList.toggle("hidden", !value);
   if (!value) messageInput.focus();
   scrollToBottom();
-}
-
-function resetChat() {
-  if (busy) return;
-  history = [];
-  saveHistory();
-  messagesEl.replaceChildren();
-  welcomeEl.classList.remove("hidden");
-  messageInput.value = "";
-  messageInput.style.height = "auto";
-  sidebar.classList.remove("open");
-  messageInput.focus();
 }
 
 async function sendMessage(rawText) {
   const content = rawText.trim();
   if (!content || busy) return;
 
+  let active = getActiveChat();
+  if (!active) {
+    active = createChat();
+    chats.unshift(active);
+    activeChatId = active.id;
+  }
+
+  const wasEmpty = active.messages.length === 0;
+  active.messages.push({ role: "user", content });
+  active.messages = active.messages.slice(-40);
+  if (wasEmpty || active.title === "Nova conversa") active.title = makeTitle(content);
+  active.updatedAt = Date.now();
+
   welcomeEl.classList.add("hidden");
-  history.push({ role: "user", content });
-  history = history.slice(-40);
   appendMessage("user", content);
-  saveHistory();
+  persistChats();
+  renderConversationList();
   messageInput.value = "";
   messageInput.style.height = "auto";
   setBusy(true);
@@ -110,7 +321,7 @@ async function sendMessage(rawText) {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: history.slice(-16) })
+      body: JSON.stringify({ messages: active.messages.slice(-16) })
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "Não consegui falar com o servidor.");
@@ -118,15 +329,21 @@ async function sendMessage(rawText) {
       throw new Error("A IA retornou uma resposta vazia. Tenta de novo.");
     }
 
-    history.push({ role: "assistant", content: data.reply.trim() });
-    history = history.slice(-40);
-    appendMessage("assistant", data.reply.trim());
-    saveHistory();
+    active.messages.push({ role: "assistant", content: data.reply.trim() });
+    active.messages = active.messages.slice(-40);
+    active.updatedAt = Date.now();
+    persistChats();
+    if (active.id === activeChatId) appendMessage("assistant", data.reply.trim());
+    renderConversationList();
   } catch (error) {
     const message = error instanceof TypeError
       ? "Não consegui alcançar o servidor. Confere se o site está publicado e tenta de novo."
       : (error.message || "Algo deu errado. Tenta de novo.");
-    appendMessage("assistant", message);
+    active.messages.push({ role: "assistant", content: message });
+    active.messages = active.messages.slice(-40);
+    active.updatedAt = Date.now();
+    persistChats();
+    if (active.id === activeChatId) appendMessage("assistant", message);
   } finally {
     setBusy(false);
   }
@@ -157,16 +374,8 @@ document.querySelectorAll("[data-prompt]").forEach((button) => {
   });
 });
 
-newChatBtn.addEventListener("click", resetChat);
-clearBtn.addEventListener("click", () => {
-  if (!history.length) {
-    showToast("Essa conversa já está vazia.");
-    return;
-  }
-  resetChat();
-  showToast("Conversa limpa.");
-});
-
+newChatBtn.addEventListener("click", startNewChat);
+clearBtn.addEventListener("click", clearCurrentChat);
 menuBtn.addEventListener("click", () => sidebar.classList.toggle("open"));
 document.addEventListener("click", (event) => {
   if (sidebar.classList.contains("open") &&
@@ -174,4 +383,5 @@ document.addEventListener("click", (event) => {
       !menuBtn.contains(event.target)) sidebar.classList.remove("open");
 });
 
+loadChats();
 renderHistory();
