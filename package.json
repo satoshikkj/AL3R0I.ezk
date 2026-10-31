@@ -6,5 +6,8 @@
   "description": "Chat de IA com personalidade AL3R0I.ezk",
   "scripts": {
     "dev": "vercel dev"
+  },
+  "dependencies": {
+    "msedge-tts": "2.1.1"
   }
 }
