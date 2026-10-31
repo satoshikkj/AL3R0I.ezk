@@ -14,35 +14,42 @@ const conversationListEl = document.getElementById("conversationList");
 const HISTORY_KEY = "al3r0i_ezk_chat_v1";
 const CHATS_KEY = "al3r0i_ezk_conversations_v1";
 const SETTINGS_KEY = "al3r0i_ezk_settings_v1";
-const DEFAULT_SETTINGS = Object.freeze({ personalityLevel: "pesada", sarcasmEnabled: true, profanityLevel: "frequente", responseLength: "equilibrada" });
+const DEFAULT_SETTINGS = Object.freeze({ responseLength: "equilibrada" });
 let userSettings = { ...DEFAULT_SETTINGS };
 function loadSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "null");
-    if (saved && typeof saved === "object") userSettings = {
-      personalityLevel: ["leve","media","pesada","extrema"].includes(saved.personalityLevel) ? saved.personalityLevel : DEFAULT_SETTINGS.personalityLevel,
-      sarcasmEnabled: typeof saved.sarcasmEnabled === "boolean" ? saved.sarcasmEnabled : DEFAULT_SETTINGS.sarcasmEnabled,
-      profanityLevel: ["nenhum","moderado","frequente"].includes(saved.profanityLevel) ? saved.profanityLevel : DEFAULT_SETTINGS.profanityLevel,
-      responseLength: ["curta","equilibrada","detalhada"].includes(saved.responseLength) ? saved.responseLength : DEFAULT_SETTINGS.responseLength
-    };
+    if (saved && typeof saved === "object") {
+      // Migração V3: preserva a preferência de tamanho e descarta controles antigos de personalidade.
+      userSettings = {
+        responseLength: ["curta", "equilibrada", "detalhada"].includes(saved.responseLength)
+          ? saved.responseLength
+          : DEFAULT_SETTINGS.responseLength
+      };
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(userSettings));
+    }
   } catch { userSettings = { ...DEFAULT_SETTINGS }; }
 }
 function renderSettings() {
-  document.getElementById("personalityLevel").value = userSettings.personalityLevel;
-  document.getElementById("sarcasmEnabled").checked = userSettings.sarcasmEnabled;
-  document.getElementById("profanityLevel").value = userSettings.profanityLevel;
   document.getElementById("responseLength").value = userSettings.responseLength;
 }
 function readSettingsForm() {
-  return { personalityLevel: document.getElementById("personalityLevel").value, sarcasmEnabled: document.getElementById("sarcasmEnabled").checked, profanityLevel: document.getElementById("profanityLevel").value, responseLength: document.getElementById("responseLength").value };
+  return { responseLength: ["curta", "equilibrada", "detalhada"].includes(document.getElementById("responseLength").value)
+    ? document.getElementById("responseLength").value
+    : DEFAULT_SETTINGS.responseLength };
 }
 function closeSettings() {
-  const overlay=document.getElementById("settingsOverlay"); overlay.classList.add("hidden"); overlay.setAttribute("aria-hidden","true");
+  const overlay = document.getElementById("settingsOverlay");
+  overlay.classList.add("hidden");
+  overlay.setAttribute("aria-hidden", "true");
 }
 function saveSettings() {
-  userSettings=readSettingsForm();
-  try { localStorage.setItem(SETTINGS_KEY,JSON.stringify(userSettings)); closeSettings(); showToast("Preferências salvas."); }
-  catch { showToast("Não consegui salvar as preferências neste dispositivo."); }
+  userSettings = readSettingsForm();
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(userSettings));
+    closeSettings();
+    showToast("Preferências salvas.");
+  } catch { showToast("Não consegui salvar as preferências neste dispositivo."); }
 }
 
 let chats = [];
