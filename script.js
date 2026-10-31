@@ -361,7 +361,7 @@ async function sendMessage(rawText) {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: active.messages.slice(-16), settings: userSettings })
+      body: JSON.stringify({ messages: active.messages.slice(-16), settings: userSettings, memories: window.AL3R0I_MEMORY?.getAll() || [] })
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "Não consegui falar com o servidor.");
