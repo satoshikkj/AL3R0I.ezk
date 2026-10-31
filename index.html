@@ -39,6 +39,7 @@
       <header class="topbar">
         <button class="icon-button menu-button" id="menuBtn" type="button" aria-label="Abrir menu">☰</button>
         <div class="top-title"><span class="live-dot"></span> <span>AL3R0I.ezk</span> <span class="top-divider">/</span> <span class="top-muted">CHAT</span></div>
+        <button class="settings-button" id="settingsBtn" type="button" aria-label="Abrir configurações">⚙ Configurações</button>
         <button class="clear-button" id="clearBtn" type="button" title="Limpar conversa">Limpar</button>
       </header>
 
@@ -67,6 +68,17 @@
       </footer>
     </main>
   </div>
+  <section class="settings-overlay hidden" id="settingsOverlay" aria-hidden="true">
+    <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="settings-header"><div><p class="eyebrow">PERSONALIZAÇÃO DO SISTEMA</p><h2 id="settingsTitle">Configurações</h2></div><button class="settings-close" id="settingsClose" type="button" aria-label="Fechar configurações">×</button></div>
+      <label class="setting-row" for="personalityLevel"><span><strong>Intensidade da personalidade</strong><small>Controla o quanto o AL3R0I provoca.</small></span><select id="personalityLevel"><option value="leve">Leve</option><option value="media">Média</option><option value="pesada" selected>Pesada</option><option value="extrema">Extrema</option></select></label>
+      <label class="setting-row" for="sarcasmEnabled"><span><strong>Sarcasmo</strong><small>Permite ironia e respostas debochadas.</small></span><input id="sarcasmEnabled" type="checkbox" checked></label>
+      <label class="setting-row" for="profanityLevel"><span><strong>Palavrões</strong><small>Frequência de linguagem mais pesada.</small></span><select id="profanityLevel"><option value="nenhum">Nenhum</option><option value="moderado">Moderado</option><option value="frequente" selected>Frequente</option></select></label>
+      <label class="setting-row" for="responseLength"><span><strong>Tamanho das respostas</strong><small>Define o nível de detalhe padrão.</small></span><select id="responseLength"><option value="curta">Curta</option><option value="equilibrada" selected>Equilibrada</option><option value="detalhada">Detalhada</option></select></label>
+      <div class="settings-footer"><button class="settings-reset" id="settingsReset" type="button">Restaurar padrão</button><button class="settings-save" id="settingsSave" type="button">Salvar preferências</button></div>
+      <p class="settings-note">As preferências ficam salvas neste dispositivo.</p>
+    </div>
+  </section>
   <div class="toast" id="toast" role="status"></div>
 </body>
 </html>
