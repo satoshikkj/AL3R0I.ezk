@@ -167,8 +167,8 @@ async function speakVoiceReply(text) {
   }
 
   const spoken = String(text)
-    .replace(/\\n\\nFontes consultadas:[\\s\\S]*$/i, "")
-    .replace(/https?:\\/\\/\\S+/g, "link")
+    .replace(/\n\nFontes consultadas:[\s\S]*$/i, "")
+    .replace(/https?:\/\/\S+/g, "link")
     .replace(/[*_#>]/g, " ")
     .replace(/\\s+/g, " ")
     .trim()
