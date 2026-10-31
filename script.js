@@ -94,7 +94,6 @@ function stopVoiceSession() {
     try { voiceRecognition.abort(); } catch {}
     voiceRecognition = null;
   }
-  window.speechSynthesis?.cancel();
   if (voiceAudioAbortController) voiceAudioAbortController.abort();
   voiceAudioAbortController = null;
   if (voiceAudio) { voiceAudio.pause(); voiceAudio.removeAttribute("src"); voiceAudio.load(); voiceAudio = null; }
@@ -211,12 +210,7 @@ async function speakVoiceReply(text) {
   } catch (error) {
     if (error.name === "AbortError" || !voiceActive) return;
     console.error("ElevenLabs TTS:", error);
-    // Fallback apenas se a API neural falhar; a voz principal continua sendo ElevenLabs.
-    try {
-      await playDeviceVoice(spoken);
-    } catch {
-      setVoiceStatus(error.message || "Falha ao gerar áudio. Confira a conexão e a chave da ElevenLabs.");
-    }
+    setVoiceStatus(error.message || "Falha ao gerar áudio. Confira a conexão e a configuração da ElevenLabs.");
   } finally {
     voiceAudioAbortController = null;
     voiceProcessing = false;
@@ -310,23 +304,6 @@ function playAudioBlob(blob) {
     audio.onended = () => { URL.revokeObjectURL(url); voiceAudio = null; resolve(); };
     audio.onerror = () => { URL.revokeObjectURL(url); voiceAudio = null; reject(new Error("Não consegui reproduzir o áudio.")); };
     audio.play().catch(reject);
-  });
-}
-
-function playDeviceVoice(text) {
-  return new Promise((resolve, reject) => {
-    if (!window.speechSynthesis || !("SpeechSynthesisUtterance" in window)) {
-      reject(new Error("Voz alternativa indisponível."));
-      return;
-    }
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "pt-BR";
-    utterance.rate = 1;
-    utterance.pitch = 0.95;
-    utterance.onend = resolve;
-    utterance.onerror = () => reject(new Error("Falha na voz alternativa."));
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
   });
 }
 
