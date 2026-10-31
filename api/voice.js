@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   }
 
   const apiKey = process.env.ELEVENLABS_API_KEY;
-  const voiceId = process.env.ELEVENLABS_VOICE_ID;
+  const voiceId = process.env.ELEVENLABS_VOICE_ID || "A41hENj1zU8e2rDksoZn";
   if (!apiKey || !voiceId) {
     res.status(503).json({
       error: "Configure ELEVENLABS_API_KEY e ELEVENLABS_VOICE_ID nas variáveis de ambiente da Vercel."
