@@ -57,6 +57,162 @@ let activeChatId = null;
 let busy = false;
 let toastTimer;
 
+// V5 — modo de voz usando recursos Web Speech do navegador; sem API paga de voz.
+const voiceBtn = document.getElementById("voiceBtn");
+const voiceOverlay = document.getElementById("voiceOverlay");
+const voiceClose = document.getElementById("voiceClose");
+const voiceToggle = document.getElementById("voiceToggle");
+const voiceStatus = document.getElementById("voiceStatus");
+const voiceTranscript = document.getElementById("voiceTranscript");
+const voiceOrb = document.getElementById("voiceOrb");
+const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+let voiceActive = false;
+let voiceListening = false;
+let voiceProcessing = false;
+let voiceFinalTranscript = "";
+let voiceRecognition = null;
+let voiceRestartTimer = null;
+
+function setVoiceStatus(message, state = "") {
+  voiceStatus.textContent = message;
+  voiceOrb.classList.toggle("listening", state === "listening");
+  voiceOrb.classList.toggle("speaking", state === "speaking");
+  voiceToggle.innerHTML = state === "listening"
+    ? "<span>■</span> Encerrar conversa"
+    : "<span>🎙</span> Começar a falar";
+}
+
+function stopVoiceSession() {
+  voiceActive = false;
+  voiceListening = false;
+  voiceProcessing = false;
+  clearTimeout(voiceRestartTimer);
+  if (voiceRecognition) {
+    voiceRecognition.onend = null;
+    try { voiceRecognition.abort(); } catch {}
+    voiceRecognition = null;
+  }
+  window.speechSynthesis?.cancel();
+  voiceOverlay.classList.add("hidden");
+  voiceOverlay.setAttribute("aria-hidden", "true");
+  voiceBtn.classList.remove("active");
+  setVoiceStatus("Toque no microfone e comece a falar.");
+}
+
+function startVoiceListening() {
+  if (!voiceActive || voiceListening || voiceProcessing || window.speechSynthesis?.speaking) return;
+  if (!SpeechRecognitionAPI) {
+    setVoiceStatus("Seu navegador não oferece reconhecimento de voz. Tente usar o Chrome atualizado.");
+    return;
+  }
+  clearTimeout(voiceRestartTimer);
+  voiceFinalTranscript = "";
+  voiceListening = true;
+  setVoiceStatus("Estou ouvindo. Pode falar...", "listening");
+  voiceTranscript.textContent = "Ouvindo sua voz...";
+  const recognition = new SpeechRecognitionAPI();
+  voiceRecognition = recognition;
+  recognition.lang = "pt-BR";
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+  recognition.onresult = (event) => {
+    let interim = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const phrase = event.results[i][0]?.transcript || "";
+      if (event.results[i].isFinal) voiceFinalTranscript += phrase + " ";
+      else interim += phrase;
+    }
+    voiceTranscript.textContent = (voiceFinalTranscript + interim).trim() || "Ouvindo sua voz...";
+  };
+  recognition.onerror = (event) => {
+    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      voiceActive = false;
+      voiceListening = false;
+      setVoiceStatus("Permissão de microfone negada. Libere o microfone nas permissões do navegador.");
+    } else if (event.error !== "no-speech" && event.error !== "aborted") {
+      setVoiceStatus("Falha no reconhecimento de voz: " + event.error + ".");
+    }
+  };
+  recognition.onend = () => {
+    voiceListening = false;
+    if (!voiceActive) return;
+    const spokenText = voiceFinalTranscript.trim();
+    if (spokenText) {
+      voiceProcessing = true;
+      voiceTranscript.textContent = spokenText;
+      setVoiceStatus("Processando sua mensagem...");
+      sendMessage(spokenText, { fromVoice: true });
+    } else {
+      setVoiceStatus("Não captei sua fala. Tente novamente.");
+      voiceRestartTimer = setTimeout(startVoiceListening, 900);
+    }
+  };
+  try { recognition.start(); }
+  catch {
+    voiceListening = false;
+    setVoiceStatus("Não consegui iniciar o microfone. Toque para tentar novamente.");
+  }
+}
+
+function speakVoiceReply(text) {
+  if (!voiceActive || !text || !window.speechSynthesis || !("SpeechSynthesisUtterance" in window)) {
+    voiceProcessing = false;
+    if (voiceActive) voiceRestartTimer = setTimeout(startVoiceListening, 350);
+    return;
+  }
+  const spoken = String(text)
+    .replace(/\n\nFontes consultadas:[\s\S]*$/i, "")
+    .replace(/https?:\/\/\S+/g, "link")
+    .replace(/[*_#>]/g, " ")
+    .trim();
+  if (!spoken) {
+    voiceProcessing = false;
+    voiceRestartTimer = setTimeout(startVoiceListening, 350);
+    return;
+  }
+  const utterance = new SpeechSynthesisUtterance(spoken);
+  utterance.lang = "pt-BR";
+  utterance.rate = 1.02;
+  utterance.pitch = 0.92;
+  const voices = window.speechSynthesis.getVoices();
+  const portugueseVoice = voices.find((voice) => /^pt[-_]BR$/i.test(voice.lang))
+    || voices.find((voice) => /^pt/i.test(voice.lang));
+  if (portugueseVoice) utterance.voice = portugueseVoice;
+  utterance.onstart = () => setVoiceStatus("AL3R0I está falando...", "speaking");
+  utterance.onend = () => {
+    voiceProcessing = false;
+    if (voiceActive) {
+      setVoiceStatus("Pode continuar. Estou ouvindo.");
+      voiceRestartTimer = setTimeout(startVoiceListening, 300);
+    }
+  };
+  utterance.onerror = () => {
+    voiceProcessing = false;
+    if (voiceActive) {
+      setVoiceStatus("Não consegui reproduzir a voz. Verifique o áudio do dispositivo.");
+      voiceRestartTimer = setTimeout(startVoiceListening, 900);
+    }
+  };
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
+}
+
+function startVoiceSession() {
+  if (!SpeechRecognitionAPI) {
+    showToast("Reconhecimento de voz não disponível neste navegador. Use o Chrome atualizado.");
+    return;
+  }
+  voiceActive = true;
+  voiceBtn.classList.add("active");
+  voiceOverlay.classList.remove("hidden");
+  voiceOverlay.setAttribute("aria-hidden", "false");
+  voiceTranscript.textContent = "Sua conversa aparecerá aqui.";
+  setVoiceStatus("Preparando o microfone...");
+  startVoiceListening();
+}
+
+
 function createId() {
   return `chat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -339,7 +495,7 @@ function setBusy(value) {
   scrollToBottom();
 }
 
-async function sendMessage(rawText) {
+async function sendMessage(rawText, options = {}) {
   const content = rawText.trim();
   if (!content || busy) return;
 
@@ -363,6 +519,7 @@ async function sendMessage(rawText) {
   messageInput.value = "";
   messageInput.style.height = "auto";
   setBusy(true);
+  let voiceReply = "";
 
   try {
     const response = await fetch("/api/chat", {
@@ -376,6 +533,7 @@ async function sendMessage(rawText) {
       throw new Error("A IA retornou uma resposta vazia. Tenta de novo.");
     }
 
+    voiceReply = data.reply.trim();
     active.messages.push({ role: "assistant", content: data.reply.trim() });
     active.messages = active.messages.slice(-40);
     active.updatedAt = Date.now();
@@ -391,6 +549,16 @@ async function sendMessage(rawText) {
     if (active.id === activeChatId) appendMessage("assistant", message);
   } finally {
     setBusy(false);
+    if (options.fromVoice) {
+      if (voiceReply && voiceActive) speakVoiceReply(voiceReply);
+      else {
+        voiceProcessing = false;
+        if (voiceActive) {
+          setVoiceStatus("Não consegui obter uma resposta. Tente falar novamente.");
+          voiceRestartTimer = setTimeout(startVoiceListening, 1000);
+        }
+      }
+    }
   }
 }
 
@@ -420,6 +588,15 @@ document.querySelectorAll("[data-prompt]").forEach((button) => {
 });
 
 newChatBtn.addEventListener("click", startNewChat);
+voiceBtn.addEventListener("click", startVoiceSession);
+voiceToggle.addEventListener("click", () => {
+  if (voiceActive) stopVoiceSession();
+  else startVoiceSession();
+});
+voiceClose.addEventListener("click", stopVoiceSession);
+voiceOverlay.addEventListener("click", (event) => {
+  if (event.target === voiceOverlay) stopVoiceSession();
+});
 clearBtn.addEventListener("click", clearCurrentChat);
 menuBtn.addEventListener("click", () => sidebar.classList.toggle("open"));
 document.addEventListener("click", (event) => {
@@ -436,7 +613,7 @@ document.getElementById("settingsClose").addEventListener("click",closeSettings)
 document.getElementById("settingsSave").addEventListener("click",saveSettings);
 document.getElementById("settingsReset").addEventListener("click",()=>{userSettings={...DEFAULT_SETTINGS};renderSettings();showToast("Padrões restaurados. Salve para aplicar.");});
 document.getElementById("settingsOverlay").addEventListener("click",(event)=>{if(event.target.id==="settingsOverlay")closeSettings();});
-document.addEventListener("keydown",(event)=>{if(event.key==="Escape")closeSettings();});
+document.addEventListener("keydown",(event)=>{if(event.key==="Escape"){closeSettings();if(voiceActive)stopVoiceSession();}});
 
 loadChats();
 renderHistory();
