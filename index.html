@@ -11,6 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
   <script src="/script.js" defer></script>
+  <script src="/memory.js" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -40,6 +41,7 @@
         <button class="icon-button menu-button" id="menuBtn" type="button" aria-label="Abrir menu">☰</button>
         <div class="top-title"><span class="live-dot"></span> <span>AL3R0I.ezk</span> <span class="top-divider">/</span> <span class="top-muted">CHAT</span></div>
         <button class="settings-button" id="settingsBtn" type="button" aria-label="Abrir configurações">⚙ Configurações</button>
+        <button class="memory-button" id="memoryBtn" type="button" aria-label="Abrir memória">✧ Memória</button>
         <button class="clear-button" id="clearBtn" type="button" title="Limpar conversa">Limpar</button>
       </header>
 
@@ -77,6 +79,20 @@
       <label class="setting-row" for="responseLength"><span><strong>Tamanho das respostas</strong><small>Define o nível de detalhe padrão.</small></span><select id="responseLength"><option value="curta">Curta</option><option value="equilibrada" selected>Equilibrada</option><option value="detalhada">Detalhada</option></select></label>
       <div class="settings-footer"><button class="settings-reset" id="settingsReset" type="button">Restaurar padrão</button><button class="settings-save" id="settingsSave" type="button">Salvar preferências</button></div>
       <p class="settings-note">As preferências ficam salvas neste dispositivo.</p>
+    </div>
+  </section>
+  <section class="memory-overlay hidden" id="memoryOverlay" aria-hidden="true">
+    <div class="memory-panel" role="dialog" aria-modal="true" aria-labelledby="memoryTitle">
+      <div class="memory-header"><div><p class="eyebrow">MEMÓRIA PERSISTENTE · V4</p><h2 id="memoryTitle">O que devo lembrar?</h2><p>Essas informações serão usadas em novas conversas neste dispositivo.</p></div><button class="memory-close" id="memoryClose" type="button" aria-label="Fechar memória">×</button></div>
+      <form id="memoryForm" class="memory-form">
+        <label for="memoryText">Informação para guardar</label>
+        <textarea id="memoryText" maxlength="240" rows="3" placeholder="Ex.: Estou desenvolvendo o projeto AL3R0I.ezk." required></textarea>
+        <div class="memory-form-footer"><span id="memoryCounter">0/240</span><button type="submit" id="memoryAdd">＋ Guardar memória</button></div>
+      </form>
+      <div class="memory-list-heading"><strong>Memórias salvas</strong><span id="memoryCount">0/30</span></div>
+      <div class="memory-list" id="memoryList"></div>
+      <p class="memory-privacy">Nada é salvo automaticamente. Não guarde senhas, chaves, documentos ou informações sensíveis. Você pode editar ou apagar qualquer memória.</p>
+      <div class="memory-actions"><button id="memoryClearAll" type="button">Apagar todas as memórias</button></div>
     </div>
   </section>
   <div class="toast" id="toast" role="status"></div>
