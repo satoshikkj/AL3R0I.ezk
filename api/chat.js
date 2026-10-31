@@ -124,15 +124,16 @@ export default async function handler(req, res) {
     }
 
 
+    const voiceMode = body?.voiceMode === true;
     const rawSettings = body?.settings && typeof body.settings === "object" ? body.settings : {};
     const settings = {
-      responseLength: ["curta", "equilibrada", "detalhada"].includes(rawSettings.responseLength)
+      responseLength: voiceMode ? "curta" : (["curta", "equilibrada", "detalhada"].includes(rawSettings.responseLength)
         ? rawSettings.responseLength
-        : "equilibrada"
+        : "equilibrada")
     };
     const settingsInstruction = `PREFERÊNCIA DE FORMATO
 Tamanho das respostas: ${settings.responseLength}. ${settings.responseLength === "curta" ? "Seja conciso sem omitir o que é essencial." : settings.responseLength === "detalhada" ? "Aprofunde quando a tarefa exigir, com etapas, exemplos e critérios verificáveis." : "Equilibre objetividade e profundidade."}
-Esta preferência altera apenas a extensão. Ela jamais altera a identidade, o tom ou a personalidade fixa do AL3R0I.ezk.`;
+Esta preferência altera apenas a extensão. Ela jamais altera a identidade, o tom ou a personalidade fixa do AL3R0I.ezk. ${voiceMode ? "MODO VOZ: responda como fala espontânea, em frases curtas e naturais; evite Markdown, tabelas, listas longas e URLs faladas." : ""}`;
     const rawMemories = Array.isArray(body?.memories) ? body.memories : [];
     const memories = rawMemories.slice(0, 30)
       .filter((item) => typeof item === "string")
@@ -162,8 +163,8 @@ Esta preferência altera apenas a extensão. Ela jamais altera a identidade, o t
         generationConfig: {
           temperature: settings.responseLength === "curta" ? 0.55 : 0.65,
           topP: 0.9,
-          maxOutputTokens: settings.responseLength === "curta" ? 4096 : settings.responseLength === "detalhada" ? 8192 : 6144,
-          ...(model.includes("2.5") ? { thinkingConfig: { thinkingBudget: -1 } } : {})
+          maxOutputTokens: voiceMode ? 1200 : settings.responseLength === "curta" ? 4096 : settings.responseLength === "detalhada" ? 8192 : 6144,
+          ...(model.includes("2.5") ? { thinkingConfig: { thinkingBudget: voiceMode ? 0 : -1 } } : {})
         },
         ...(shouldUseGoogleSearch(contents) ? { tools: [{ google_search: {} }] } : {})
       }),
