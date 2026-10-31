@@ -13,6 +13,38 @@ const conversationListEl = document.getElementById("conversationList");
 
 const HISTORY_KEY = "al3r0i_ezk_chat_v1";
 const CHATS_KEY = "al3r0i_ezk_conversations_v1";
+const SETTINGS_KEY = "al3r0i_ezk_settings_v1";
+const DEFAULT_SETTINGS = Object.freeze({ personalityLevel: "pesada", sarcasmEnabled: true, profanityLevel: "frequente", responseLength: "equilibrada" });
+let userSettings = { ...DEFAULT_SETTINGS };
+function loadSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "null");
+    if (saved && typeof saved === "object") userSettings = {
+      personalityLevel: ["leve","media","pesada","extrema"].includes(saved.personalityLevel) ? saved.personalityLevel : DEFAULT_SETTINGS.personalityLevel,
+      sarcasmEnabled: typeof saved.sarcasmEnabled === "boolean" ? saved.sarcasmEnabled : DEFAULT_SETTINGS.sarcasmEnabled,
+      profanityLevel: ["nenhum","moderado","frequente"].includes(saved.profanityLevel) ? saved.profanityLevel : DEFAULT_SETTINGS.profanityLevel,
+      responseLength: ["curta","equilibrada","detalhada"].includes(saved.responseLength) ? saved.responseLength : DEFAULT_SETTINGS.responseLength
+    };
+  } catch { userSettings = { ...DEFAULT_SETTINGS }; }
+}
+function renderSettings() {
+  document.getElementById("personalityLevel").value = userSettings.personalityLevel;
+  document.getElementById("sarcasmEnabled").checked = userSettings.sarcasmEnabled;
+  document.getElementById("profanityLevel").value = userSettings.profanityLevel;
+  document.getElementById("responseLength").value = userSettings.responseLength;
+}
+function readSettingsForm() {
+  return { personalityLevel: document.getElementById("personalityLevel").value, sarcasmEnabled: document.getElementById("sarcasmEnabled").checked, profanityLevel: document.getElementById("profanityLevel").value, responseLength: document.getElementById("responseLength").value };
+}
+function closeSettings() {
+  const overlay=document.getElementById("settingsOverlay"); overlay.classList.add("hidden"); overlay.setAttribute("aria-hidden","true");
+}
+function saveSettings() {
+  userSettings=readSettingsForm();
+  try { localStorage.setItem(SETTINGS_KEY,JSON.stringify(userSettings)); closeSettings(); showToast("Preferências salvas."); }
+  catch { showToast("Não consegui salvar as preferências neste dispositivo."); }
+}
+
 let chats = [];
 let activeChatId = null;
 let busy = false;
@@ -329,7 +361,7 @@ async function sendMessage(rawText) {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: active.messages.slice(-16) })
+      body: JSON.stringify({ messages: active.messages.slice(-16), settings: userSettings })
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "Não consegui falar com o servidor.");
@@ -390,6 +422,16 @@ document.addEventListener("click", (event) => {
       !sidebar.contains(event.target) &&
       !menuBtn.contains(event.target)) sidebar.classList.remove("open");
 });
+
+loadSettings();
+renderSettings();
+
+document.getElementById("settingsBtn").addEventListener("click", () => { renderSettings(); const overlay=document.getElementById("settingsOverlay"); overlay.classList.remove("hidden"); overlay.setAttribute("aria-hidden","false"); });
+document.getElementById("settingsClose").addEventListener("click",closeSettings);
+document.getElementById("settingsSave").addEventListener("click",saveSettings);
+document.getElementById("settingsReset").addEventListener("click",()=>{userSettings={...DEFAULT_SETTINGS};renderSettings();showToast("Padrões restaurados. Salve para aplicar.");});
+document.getElementById("settingsOverlay").addEventListener("click",(event)=>{if(event.target.id==="settingsOverlay")closeSettings();});
+document.addEventListener("keydown",(event)=>{if(event.key==="Escape")closeSettings();});
 
 loadChats();
 renderHistory();
