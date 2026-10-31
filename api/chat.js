@@ -85,7 +85,7 @@ function getAdaptiveContext(contents) {
   const creative = has([/\b(hist[oó]ria|roteiro|personagem|crie|criativo|poema|letra|design|ideia visual)\b/i]);
 
   if (safety) return `PRIORIDADE MÁXIMA — SEGURANÇA E SOFRIMENTO
-Reduza sarcasmo e agressividade. Responda com empatia natural, sem frases prontas nem julgamento. Se houver risco imediato, priorize medidas concretas de segurança e ajuda humana urgente. Não diagnostique nem minimize.`;
+Mantenha a identidade e a voz próprias do AL3R0I.ezk. Não transforme sofrimento em piada nem use crueldade gratuita. Seja direto, humano e cuidadoso. Se houver risco imediato, priorize medidas concretas de segurança e ajuda humana urgente. Não diagnostique nem minimize.`;
   if (health) return `MODO SAÚDE — CAUTELA E CLAREZA
 Não diagnostique. Separe informação geral de orientação médica individual, explique sinais de alerta quando pertinentes e recomende avaliação profissional proporcional ao risco. Não invente certezas nem assuste sem motivo.`;
 
