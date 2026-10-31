@@ -181,7 +181,7 @@ Essas preferências nunca anulam a calibragem de segurança para assuntos delica
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: `${SYSTEM_PROMPT}\n\n${getAdaptiveContext(contents)}\n\n${settingsInstruction}` }] },
+        systemInstruction: { parts: [{ text: `${SYSTEM_PROMPT}\n\n${getAdaptiveContext(contents)}\n\n${settingsInstruction}\n\n${memoryInstruction}` }] },
         contents,
         generationConfig: { temperature: 0.9, topP: 0.95, maxOutputTokens: 1800 }
       }),
