@@ -182,6 +182,7 @@ async function speakVoiceReply(text) {
 
   setVoiceStatus("Preparando a voz neural...", "speaking");
   voiceAudioAbortController = new AbortController();
+  let playbackError = "";
 
   try {
     const response = await fetch("/api/voice", {
@@ -209,14 +210,20 @@ async function speakVoiceReply(text) {
     }
   } catch (error) {
     if (error.name === "AbortError" || !voiceActive) return;
-    console.error("ElevenLabs TTS:", error);
-    setVoiceStatus(error.message || "Falha ao gerar áudio. Confira a conexão e a configuração da ElevenLabs.");
+    console.error("Microsoft Edge TTS:", error);
+    playbackError = error.message || "Falha ao gerar áudio. Tente novamente.";
+    setVoiceStatus(playbackError);
   } finally {
     voiceAudioAbortController = null;
     voiceProcessing = false;
     if (voiceActive) {
-      setVoiceStatus("Pode continuar. Estou ouvindo.");
-      voiceRestartTimer = setTimeout(startVoiceListening, 220);
+      if (playbackError) {
+        setVoiceStatus(playbackError);
+        voiceRestartTimer = setTimeout(startVoiceListening, 1800);
+      } else {
+        setVoiceStatus("Pode continuar. Estou ouvindo.");
+        voiceRestartTimer = setTimeout(startVoiceListening, 220);
+      }
     }
   }
 }
