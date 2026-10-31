@@ -64,6 +64,7 @@
       <footer class="composer-wrap">
         <form class="composer" id="chatForm">
           <textarea id="messageInput" rows="1" maxlength="4000" placeholder="Fala aí. Tô ouvindo..." aria-label="Sua mensagem" required></textarea>
+          <button class="voice-button" id="voiceBtn" type="button" aria-label="Iniciar conversa por voz" title="Conversar por voz">🎙</button>
           <button class="send-button" id="sendBtn" type="submit" aria-label="Enviar mensagem"><span>↑</span></button>
         </form>
         <div class="composer-note"><span>AL3R0I.EZK</span><span>IA REAL · PODE ERRAR</span></div>
@@ -91,6 +92,19 @@
       <div class="memory-list" id="memoryList"></div>
       <p class="memory-privacy">Nada é salvo automaticamente. Não guarde senhas, chaves, documentos ou informações sensíveis. Você pode editar ou apagar qualquer memória.</p>
       <div class="memory-actions"><button id="memoryClearAll" type="button">Apagar todas as memórias</button></div>
+    </div>
+  </section>
+  <section class="voice-overlay hidden" id="voiceOverlay" aria-hidden="true">
+    <div class="voice-panel" role="dialog" aria-modal="true" aria-labelledby="voiceTitle">
+      <div class="voice-header">
+        <div><p class="eyebrow">CONVERSA POR VOZ</p><h2 id="voiceTitle">AL3R0I.ezk</h2></div>
+        <button class="voice-close" id="voiceClose" type="button" aria-label="Fechar conversa por voz">×</button>
+      </div>
+      <div class="voice-orb" id="voiceOrb" aria-hidden="true"><span>A.</span></div>
+      <p class="voice-status" id="voiceStatus" role="status">Toque no microfone e comece a falar.</p>
+      <p class="voice-transcript" id="voiceTranscript">Sua conversa aparecerá aqui.</p>
+      <button class="voice-toggle" id="voiceToggle" type="button"><span>🎙</span> Começar a falar</button>
+      <p class="voice-disclaimer">Modo gratuito do navegador · usa a voz disponível no seu dispositivo</p>
     </div>
   </section>
   <div class="toast" id="toast" role="status"></div>
