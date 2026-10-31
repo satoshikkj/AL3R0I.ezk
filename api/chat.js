@@ -61,7 +61,7 @@ function shouldUseGoogleSearch(contents) {
   const text = contents.filter((item) => item.role === "user")
     .slice(-4).map((item) => item.parts.map((part) => part.text || "").join(" ")).join(" ")
     .toLocaleLowerCase("pt-BR");
-  return /\\b(hoje|agora|atual(izado|mente)?|mais recente|últimas? notícias|notícias|202[5-9]|preço atual|cotação|lançamento|disponibilidade|mudou|mudança recente|quem é o atual|quando será|neste mês|esta semana)\\b/i.test(text);
+  return /\b(hoje|agora|atual(izado|mente)?|mais recente|últimas? notícias|notícias|202[5-9]|preço atual|cotação|lançamento|disponibilidade|mudou|mudança recente|quem é o atual|quando será|neste mês|esta semana|pesquise|pesquisa|fontes|site oficial|dados atuais)\b/i.test(text);
 }
 
 function getAdaptiveContext(contents) {
@@ -186,7 +186,7 @@ Esta preferência altera apenas a extensão. Ela jamais altera a identidade, o t
     if (!answer) return json(res, 502, { error: "A IA não retornou texto desta vez. Tenta perguntar de outro jeito." });
     const groundedSources = (data?.candidates?.[0]?.groundingMetadata?.groundingChunks || [])
       .map((chunk) => chunk?.web)
-      .filter((web) => web && typeof web.uri === "string" && /^https?:\\/\\//i.test(web.uri))
+      .filter((web) => web && typeof web.uri === "string" && /^https?:\/\//i.test(web.uri))
       .filter((web, index, all) => all.findIndex((item) => item.uri === web.uri) === index)
       .slice(0, 6);
     const reply = groundedSources.length
