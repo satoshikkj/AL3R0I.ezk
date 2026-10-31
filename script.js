@@ -634,7 +634,7 @@ async function sendMessage(rawText, options = {}) {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: active.messages.slice(-20), settings: userSettings, memories: window.AL3R0I_MEMORY?.getAll() || [] })
+      body: JSON.stringify({ messages: active.messages.slice(options.fromVoice ? -10 : -20), settings: userSettings, memories: window.AL3R0I_MEMORY?.getAll() || [], voiceMode: Boolean(options.fromVoice) })
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "Não consegui falar com o servidor.");
