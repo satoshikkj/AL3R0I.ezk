@@ -53,6 +53,12 @@ function loadChats() {
         .sort((a, b) => b.updatedAt - a.updatedAt);
       activeChatId = localStorage.getItem(`${CHATS_KEY}:active`);
       if (!chats.some((chat) => chat.id === activeChatId)) activeChatId = chats[0]?.id || null;
+      if (!chats.length) {
+        const firstChat = createChat();
+        chats = [firstChat];
+        activeChatId = firstChat.id;
+        persistChats();
+      }
       return;
     }
   } catch {
@@ -158,6 +164,8 @@ function renderHistory() {
 function renderConversationList() {
   if (!conversationListEl) return;
   conversationListEl.replaceChildren();
+  const countEl = document.getElementById("historyCount");
+  if (countEl) countEl.textContent = String(chats.length);
 
   const ordered = [...chats].sort((a, b) => b.updatedAt - a.updatedAt);
   if (!ordered.length) {
