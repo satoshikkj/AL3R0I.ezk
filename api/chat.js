@@ -143,6 +143,20 @@ export default async function handler(req, res) {
       return json(res, 400, { error: "Envie uma mensagem para começar." });
     }
 
+
+    const rawSettings = body?.settings && typeof body.settings === "object" ? body.settings : {};
+    const settings = {
+      personalityLevel: ["leve", "media", "pesada", "extrema"].includes(rawSettings.personalityLevel) ? rawSettings.personalityLevel : "pesada",
+      sarcasmEnabled: typeof rawSettings.sarcasmEnabled === "boolean" ? rawSettings.sarcasmEnabled : true,
+      profanityLevel: ["nenhum", "moderado", "frequente"].includes(rawSettings.profanityLevel) ? rawSettings.profanityLevel : "frequente",
+      responseLength: ["curta", "equilibrada", "detalhada"].includes(rawSettings.responseLength) ? rawSettings.responseLength : "equilibrada"
+    };
+    const settingsInstruction = `PREFERÊNCIAS DO USUÁRIO (V3)
+Intensidade da personalidade: ${settings.personalityLevel}. Ajuste a força da provocação a esse nível, sem atacar a dignidade da pessoa.
+Sarcasmo: ${settings.sarcasmEnabled ? "ativado; use ironia quando encaixar" : "desativado; evite ironia e deboche"}.
+Palavrões: ${settings.profanityLevel}. ${settings.profanityLevel === "nenhum" ? "Não use palavrões." : settings.profanityLevel === "moderado" ? "Use palavrões raramente e só quando naturais." : "Palavrões podem aparecer com frequência moderada, sem virar muleta."}
+Tamanho das respostas: ${settings.responseLength}. ${settings.responseLength === "curta" ? "Priorize respostas concisas e vá direto ao ponto." : settings.responseLength === "detalhada" ? "Explique com contexto, exemplos e etapas quando forem úteis." : "Equilibre objetividade e explicação, sem alongar desnecessariamente."}
+Essas preferências nunca anulam a calibragem de segurança para assuntos delicados nem a honestidade factual.`;
     const contents = messages.slice(-16).map((message) => {
       const role = message?.role === "assistant" ? "model" : "user";
       const text = typeof message?.content === "string" ? message.content.trim().slice(0, 4000) : "";
@@ -159,7 +173,7 @@ export default async function handler(req, res) {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: `${SYSTEM_PROMPT}\n\n${getAdaptiveContext(contents)}` }] },
+        systemInstruction: { parts: [{ text: `${SYSTEM_PROMPT}\n\n${getAdaptiveContext(contents)}\n\n${settingsInstruction}` }] },
         contents,
         generationConfig: { temperature: 0.9, topP: 0.95, maxOutputTokens: 1800 }
       }),
